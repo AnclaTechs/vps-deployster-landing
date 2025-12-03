@@ -635,7 +635,7 @@
                 Terminal
               </div>
               <div class="tab" onclick="switchMode('gui')" id="tab-gui">
-                Dashboard (Localhost)
+                Dashboard
               </div>
             </div>
           </div>
@@ -1024,7 +1024,7 @@
       </div>
     </footer>
 
-    <script>
+  <script>
       if (window.deploysterDemoHasRun) {
         console.log("Already running");
       } else {
@@ -1041,7 +1041,7 @@
           },
           {
             cmd: "deployster status --app myapp",
-            out: "PIPELINE      STATUS     BRANCH      LAST DEPLOY\ndevelopment      Running    feat/login  45m ago\nproduction    Active     main      2d ago",
+            out: "PIPELINE      STATUS     BRANCH      LAST DEPLOY\ndevelopment   Running    feat/login  45m ago\nproduction    Active     main        2d ago",
           },
           {
             cmd: "deployster rollback --app myapp --pipeline production --to v1.0.4",
@@ -1067,25 +1067,26 @@
 
         let cmdIndex = 0;
         let charIndex = 0;
-        let typerInterval = null;
+        let isTyping = false;
 
         const getCmdSpan = () =>
+          document.getElementById("typing-target") ||
           document.querySelector(".cli-line .command-text");
         const getCliView = () => document.getElementById("view-cli");
         const cliContent = document.getElementById("cli-content");
 
         function typeWriter() {
-          const view = getCliView();
           const span = getCmdSpan();
-          if (!view || !span || !view.classList.contains("active")) return;
+          if (!span) return;
 
           const cmd = commands[cmdIndex].cmd;
 
           if (charIndex < cmd.length) {
             span.textContent += cmd.charAt(charIndex);
             charIndex++;
-            typerInterval = setTimeout(typeWriter, 40 + Math.random() * 50);
+            setTimeout(typeWriter, 40 + Math.random() * 50);
           } else {
+            isTyping = false;
             setTimeout(showOutput, 600);
           }
         }
@@ -1094,7 +1095,6 @@
           const span = getCmdSpan();
           if (!span) return;
 
-          // Output block
           const div = document.createElement("div");
           div.style.marginBottom = "15px";
           div.innerHTML = `
@@ -1103,34 +1103,37 @@
         `;
           cliContent.appendChild(div);
 
-          // Resets for next command
           span.textContent = "";
           charIndex = 0;
           cmdIndex = (cmdIndex + 1) % commands.length;
 
-          // Auto-scroll
-          getCliView().scrollTop = getCliView().scrollHeight;
+          requestAnimationFrame(() => {
+            const view = getCliView();
+            if (view) view.scrollTop = view.scrollHeight;
+          });
 
-          // Loop Logic
           if (cmdIndex === 0) {
             setTimeout(() => {
               cliContent.innerHTML = "";
-              setTimeout(startTyping, 800);
+              setTimeout(triggerNextCommand, 800);
             }, 5000);
           } else {
-            // Breaktime in-between commands
-            setTimeout(startTyping, 1300);
+            setTimeout(triggerNextCommand, 1300);
           }
         }
 
-        function startTyping() {
-          const span = getCmdSpan();
-          if (span && getCliView().classList.contains("active")) {
-            typeWriter();
+        function triggerNextCommand() {
+          const view = getCliView();
+          if (view && view.classList.contains("active")) {
+            if (!isTyping) {
+              isTyping = true;
+              typeWriter();
+            }
+          } else {
+            setTimeout(triggerNextCommand, 500);
           }
         }
 
-        // Tabs
         window.switchMode = function (mode) {
           document
             .querySelectorAll(".tab")
@@ -1143,14 +1146,16 @@
           document.getElementById("view-" + mode).classList.add("active");
 
           if (mode === "cli") {
-            clearTimeout(typerInterval);
-            setTimeout(startTyping, 100);
+            const span = getCmdSpan();
+            if (span && span.textContent.length === 0 && !isTyping) {
+              triggerNextCommand();
+            }
           }
         };
 
         document.addEventListener("DOMContentLoaded", () => {
           if (!getCmdSpan()) return;
-          setTimeout(startTyping, 1000);
+          setTimeout(triggerNextCommand, 1000);
         });
       }
     </script>

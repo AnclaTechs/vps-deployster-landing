@@ -1,0 +1,80 @@
+name: Deploy to Landing Page
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger-remote:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Git pull new update
+        id: deploy_trigger
+        run: |
+          cd_path="${{ secrets.REMOTE_APP_ADDRESS }}"
+
+          response=$(curl -s -X POST ${{ secrets.DEPLOY_URL }}/deploy \
+            -H "x-deployster-token: ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "cd": "'"$cd_path"'",
+              "commit_hash": "${{ github.sha }}",
+              "ref_name": "${{ github.ref_name }}",
+              "commands": [
+                "git reset --hard",
+                "git clean -fd",
+                "git pull origin ${{ github.ref_name }}",
+              ]
+            }')
+
+          echo "Response from deploy trigger: $response"  # For debugging
+
+          echo "$response" > deploy_response.json
+
+          job_id=$(echo "$response" | jq -r '.job_id')
+
+          if [ "$job_id" == "null" ] || [ -z "$job_id" ]; then
+            echo "❌ Failed to retrieve job ID"
+            echo "Response was: $response"
+            exit 1
+          fi
+
+          echo "job_id=$job_id" >> $GITHUB_OUTPUT
+
+      - name: Poll Logs
+        run: |
+          job_id=${{ steps.deploy_trigger.outputs.job_id }}
+
+          if [ -z "$job_id" ] || [ "$job_id" == "null" ]; then
+            echo "❌ Failed to retrieve job ID"
+            cat deploy_response.json
+            exit 1
+          fi
+
+          for i in {1..50}; do
+            response=$(curl -s ${{ secrets.DEPLOY_URL }}/status/$job_id \
+              -H "x-deployster-token: ${{ secrets.DEPLOY_TOKEN }}")
+            echo "$response" > status.json
+
+            status=$(jq -r '.status' status.json)
+            echo "::group::Deploy Logs - Poll $i"
+            jq -r '.logs' status.json
+            echo "::endgroup::"
+
+            if [[ "$status" == "complete" ]]; then
+              echo "✅ Deployment complete"
+              break
+            elif [[ "$status" == "failed" ]]; then
+              echo "❌ Deployment failed"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Fallback if job doesn't complete within 50 polls
+          if [[ "$status" != "complete" && "$status" != "failed" ]]; then
+            echo "⚠️ Deployment did not finish within the expected time"
+            exit 1
+          fi

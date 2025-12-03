@@ -26,7 +26,7 @@ jobs:
                 "git reset --hard",
                 "git clean -fd",
                 "git pull origin ${{ github.ref_name }}",
-                "supervisorctl start app"
+                "supervisorctl restart vps-deployster-landing"
               ]
             }')
 

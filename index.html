@@ -311,6 +311,7 @@
         height: 100%;
         overflow-y: auto;
         display: none; /* Hidden by default */
+        -webkit-overflow-scrolling: touch;
       }
       .view-cli.active {
         display: block;
@@ -635,7 +636,7 @@
                 Terminal
               </div>
               <div class="tab" onclick="switchMode('gui')" id="tab-gui">
-                Dashboard
+                Dashboard (Localhost)
               </div>
             </div>
           </div>
@@ -1024,140 +1025,107 @@
       </div>
     </footer>
 
-  <script>
-      if (window.deploysterDemoHasRun) {
-        console.log("Already running");
+ <script>
+  if (!window.deploysterDemoHasRun) {
+    window.deploysterDemoHasRun = true;
+
+    const commands = [
+      { cmd: "deployster -v", out: "v2.0.0 (Stable)" },
+      { cmd: "deployster apps", out: "APP ID    NAME           STATUS\nade-44    myapp          RUNNING\nbfe-21    api-gateway    RUNNING\nc99-11    auth-service   STOPPED" },
+      { cmd: "deployster status --app myapp", out: "PIPELINE      STATUS     BRANCH      LAST DEPLOY\ndevelopment   Running    feat/login  45m ago\nproduction    Active     main        2d ago" },
+      { cmd: "deployster rollback --app myapp --pipeline production --to v1.0.4", out: "> Verifying artifact v1.0.4... [OK]\n> Rolling back production pipeline...\n> Swapping containers... [OK]\n✔ Rollback complete. Production is now on v1.0.4" },
+      { cmd: "deployster deploy --app myapp --pipeline development --branch develop", out: "> Fetching origin/develop... [OK]\n> Building Docker image (dev)... [OK]\n> Running tests... [Passed]\n✔ Deployed to Development Pipeline (port: 3000)" },
+      { cmd: "deployster health --app myapp", out: "PIPELINE      CPU    RAM      UPTIME   HEALTH\ndevelopment   5%     250MB    10m      ✔ OK\nproduction    12%    640MB    4d 2h    ✔ OK" },
+      { cmd: "deployster restart --app myapp --pipeline production", out: "> Stopping production containers... [OK]\n> Starting containers... [OK]\n✔ Production pipeline restarted successfully." },
+      { cmd: "deployster logs --app myapp --pipeline production --tail 100", out: "[INFO] Request to /api/login\n[INFO] Database connection established\n[WARN] Cache miss for key: user_12\n... (streaming)" },
+    ];
+
+    let cmdIndex = 0;
+    let charIndex = 0;
+    let typerTimeout = null;
+
+    const cliContent = document.getElementById("cli-content");
+    const getCmdSpan = () => document.querySelector(".cli-line .command-text");
+    const getCliView = () => document.getElementById("view-cli");
+
+    function typeWriter() {
+      const span = getCmdSpan();
+      const view = getCliView();
+      if (!span || !view || !view.classList.contains("active")) return;
+
+      const cmd = commands[cmdIndex].cmd;
+
+      if (charIndex < cmd.length) {
+        span.textContent += cmd.charAt(charIndex);
+
+        // Force reflow for iOS rendering
+        span.offsetHeight;
+
+        charIndex++;
+        typerTimeout = setTimeout(typeWriter, 40 + Math.random() * 50);
       } else {
-        window.deploysterDemoHasRun = true;
-
-        const commands = [
-          {
-            cmd: "deployster -v",
-            out: "v2.0.0 (Stable)",
-          },
-          {
-            cmd: "deployster apps",
-            out: "APP ID    NAME           STATUS\nade-44    myapp          RUNNING\nbfe-21    api-gateway    RUNNING\nc99-11    auth-service   STOPPED",
-          },
-          {
-            cmd: "deployster status --app myapp",
-            out: "PIPELINE      STATUS     BRANCH      LAST DEPLOY\ndevelopment   Running    feat/login  45m ago\nproduction    Active     main        2d ago",
-          },
-          {
-            cmd: "deployster rollback --app myapp --pipeline production --to v1.0.4",
-            out: "> Verifying artifact v1.0.4... [OK]\n> Rolling back production pipeline...\n> Swapping containers... [OK]\n✔ Rollback complete. Production is now on v1.0.4",
-          },
-          {
-            cmd: "deployster deploy --app myapp --pipeline development --branch develop",
-            out: "> Fetching origin/develop... [OK]\n> Building Docker image (dev)... [OK]\n> Running tests... [Passed]\n✔ Deployed to Development Pipeline (port: 3000)",
-          },
-          {
-            cmd: "deployster health --app myapp",
-            out: "PIPELINE      CPU    RAM      UPTIME   HEALTH\ndevelopment   5%     250MB    10m      ✔ OK\nproduction    12%    640MB    4d 2h    ✔ OK",
-          },
-          {
-            cmd: "deployster restart --app myapp --pipeline production",
-            out: "> Stopping production containers... [OK]\n> Starting containers... [OK]\n✔ Production pipeline restarted successfully.",
-          },
-          {
-            cmd: "deployster logs --app myapp --pipeline production --tail 100",
-            out: "[INFO] Request to /api/login\n[INFO] Database connection established\n[WARN] Cache miss for key: user_12\n... (streaming)",
-          },
-        ];
-
-        let cmdIndex = 0;
-        let charIndex = 0;
-        let isTyping = false;
-
-        const getCmdSpan = () =>
-          document.getElementById("typing-target") ||
-          document.querySelector(".cli-line .command-text");
-        const getCliView = () => document.getElementById("view-cli");
-        const cliContent = document.getElementById("cli-content");
-
-        function typeWriter() {
-          const span = getCmdSpan();
-          if (!span) return;
-
-          const cmd = commands[cmdIndex].cmd;
-
-          if (charIndex < cmd.length) {
-            span.textContent += cmd.charAt(charIndex);
-            charIndex++;
-            setTimeout(typeWriter, 40 + Math.random() * 50);
-          } else {
-            isTyping = false;
-            setTimeout(showOutput, 600);
-          }
-        }
-
-        function showOutput() {
-          const span = getCmdSpan();
-          if (!span) return;
-
-          const div = document.createElement("div");
-          div.style.marginBottom = "15px";
-          div.innerHTML = `
-            <div><span class="prompt">$</span> <span class="command-text">${commands[cmdIndex].cmd}</span></div>
-            <div class="output" style="white-space: pre;">${commands[cmdIndex].out}</div>
-        `;
-          cliContent.appendChild(div);
-
-          span.textContent = "";
-          charIndex = 0;
-          cmdIndex = (cmdIndex + 1) % commands.length;
-
-          requestAnimationFrame(() => {
-            const view = getCliView();
-            if (view) view.scrollTop = view.scrollHeight;
-          });
-
-          if (cmdIndex === 0) {
-            setTimeout(() => {
-              cliContent.innerHTML = "";
-              setTimeout(triggerNextCommand, 800);
-            }, 5000);
-          } else {
-            setTimeout(triggerNextCommand, 1300);
-          }
-        }
-
-        function triggerNextCommand() {
-          const view = getCliView();
-          if (view && view.classList.contains("active")) {
-            if (!isTyping) {
-              isTyping = true;
-              typeWriter();
-            }
-          } else {
-            setTimeout(triggerNextCommand, 500);
-          }
-        }
-
-        window.switchMode = function (mode) {
-          document
-            .querySelectorAll(".tab")
-            .forEach((t) => t.classList.remove("active"));
-          document
-            .querySelectorAll(".view-cli, .view-gui")
-            .forEach((v) => v.classList.remove("active"));
-
-          document.getElementById("tab-" + mode).classList.add("active");
-          document.getElementById("view-" + mode).classList.add("active");
-
-          if (mode === "cli") {
-            const span = getCmdSpan();
-            if (span && span.textContent.length === 0 && !isTyping) {
-              triggerNextCommand();
-            }
-          }
-        };
-
-        document.addEventListener("DOMContentLoaded", () => {
-          if (!getCmdSpan()) return;
-          setTimeout(triggerNextCommand, 1000);
-        });
+        setTimeout(showOutput, 600);
       }
-    </script>
+    }
+
+    function showOutput() {
+      const div = document.createElement("div");
+      div.innerHTML = `
+        <div><span class="prompt">$</span> <span class="command-text">${commands[cmdIndex].cmd}</span></div>
+        <div class="output">${commands[cmdIndex].out}</div>
+      `;
+      cliContent.appendChild(div);
+
+      // Reset typing
+      charIndex = 0;
+      cmdIndex = (cmdIndex + 1) % commands.length;
+      getCmdSpan().textContent = "";
+
+      // Scroll smoothly using requestAnimationFrame
+      requestAnimationFrame(() => {
+        getCliView().scrollTop = getCliView().scrollHeight;
+      });
+
+      // Loop commands
+      if (cmdIndex === 0) {
+        setTimeout(() => {
+          cliContent.innerHTML = `<div class="cli-line"><span class="prompt">$</span> <span class="command-text"></span></div>`;
+          setTimeout(startTyping, 800);
+        }, 5000);
+      } else {
+        setTimeout(startTyping, 1300);
+      }
+    }
+
+    function startTyping() {
+      requestAnimationFrame(() => {
+        const span = getCmdSpan();
+        if (span && getCliView().classList.contains("active")) {
+          typeWriter();
+        }
+      });
+    }
+
+    // Tab switching (CLI/GUI)
+    window.switchMode = function (mode) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".view-cli, .view-gui").forEach(v => v.classList.remove("active"));
+
+      document.getElementById("tab-" + mode).classList.add("active");
+      document.getElementById("view-" + mode).classList.add("active");
+
+      if (mode === "cli") {
+        clearTimeout(typerTimeout);
+        setTimeout(startTyping, 100);
+      }
+    };
+
+    // Start on page load
+    window.addEventListener("load", () => {
+      if (!getCmdSpan()) return;
+      setTimeout(startTyping, 1000);
+    });
+  }
+</script>
   </body>
 </html>
